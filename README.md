@@ -1,8 +1,8 @@
 # PHPNomad Chrono
 
-Time-related strategy interfaces for PHPNomad. Your code depends on a small set of strategies; the concrete implementations are swappable without touching consumers.
+Time-related strategy interfaces for PHPNomad. A catalog of narrow capabilities that integration packages implement against any underlying time library — PSR-20, Carbon, Tokei, lcobucci/clock, symfony/clock, WordPress core, native PHP — so consumers can compose time-handling capabilities across libraries without touching call sites.
 
-This package ships **interfaces only**. Pair it with an implementation package — for example [`phpnomad/wordpress-integration`](https://github.com/phpnomad/wordpress-integration), which binds WordPress's `current_datetime()` to `ClockStrategy`, or any PSR-20-compatible clock such as [`lcobucci/clock`](https://github.com/lcobucci/clock) or [`symfony/clock`](https://github.com/symfony/clock).
+This package ships **interfaces only**. Pair it with one or more integration packages — for example [`phpnomad/wordpress-integration`](https://github.com/phpnomad/wordpress-integration), which binds WordPress's `current_datetime()`, `wp_timezone()`, `wp_date()`, and `human_time_diff()` to the appropriate interfaces.
 
 ## Requirements
 
@@ -14,23 +14,27 @@ PHP 8.2 or newer.
 composer require phpnomad/chrono
 ```
 
-You will also need a concrete `ClockStrategy` binding. On WordPress, install [`phpnomad/wordpress-integration`](https://github.com/phpnomad/wordpress-integration) and the binding is registered automatically. Elsewhere, bind any [PSR-20](https://www.php-fig.org/psr/psr-20/) `ClockInterface` implementation to `ClockStrategy` in your composition root.
+You will also need at least one concrete `ClockStrategy` binding. On WordPress, install [`phpnomad/wordpress-integration`](https://github.com/phpnomad/wordpress-integration) and the wiring is automatic. Elsewhere, bind any [PSR-20](https://www.php-fig.org/psr/psr-20/) `ClockInterface` implementation (e.g. [`lcobucci/clock`](https://github.com/lcobucci/clock) or [`symfony/clock`](https://github.com/symfony/clock)) to `ClockStrategy` in your composition root.
 
 ## Usage
 
-Inject `ClockStrategy` wherever you previously called `new DateTime()` or `time()` to read "now":
+Inject the capabilities you need. A consumer that does not care about formatting or arithmetic depends on `ClockStrategy` alone:
 
 ```php
 use DateTimeImmutable;
+use PHPNomad\Chrono\Interfaces\CanCheckIfPast;
 use PHPNomad\Chrono\Interfaces\ClockStrategy;
 
 final class TokenService
 {
-    public function __construct(private ClockStrategy $clock) {}
+    public function __construct(
+        private ClockStrategy $clock,
+        private CanCheckIfPast $past,
+    ) {}
 
     public function isExpired(DateTimeImmutable $expiresAt): bool
     {
-        return $expiresAt < $this->clock->now();
+        return $this->past->isPast($expiresAt);
     }
 
     public function issueExpiringIn(string $relative): DateTimeImmutable
@@ -40,34 +44,125 @@ final class TokenService
 }
 ```
 
-In tests, bind a frozen clock so time-dependent assertions are deterministic:
+In tests, bind a frozen `ClockStrategy` and a stub `CanCheckIfPast`:
 
 ```php
 $clock = new Lcobucci\Clock\FrozenClock(new DateTimeImmutable('2026-05-27T12:00:00Z'));
-$service = new TokenService($clock);
+$past  = new class ($clock) implements CanCheckIfPast {
+    public function __construct(private ClockStrategy $clock) {}
+    public function isPast(DateTimeImmutable $i): bool { return $i < $this->clock->now(); }
+};
+$service = new TokenService($clock, $past);
 
 $this->assertFalse($service->isExpired(new DateTimeImmutable('2026-05-27T13:00:00Z')));
 $this->assertTrue($service->isExpired(new DateTimeImmutable('2026-05-27T11:00:00Z')));
 ```
 
-## Contract
+## Catalog
 
-### `ClockStrategy`
+Each interface is narrow — one or a few related methods — so integrators can implement whatever subset their underlying library naturally covers. A single concrete class can implement many interfaces.
 
-Extends PSR-20 `Psr\Clock\ClockInterface`. The PHPNomad-shaped alias exists so dependency-injection bindings follow the framework's strategy naming convention, but any PSR-20 implementation is structurally a valid binding without an adapter.
+### Clock and provider state
+
+| Interface | Method | Notes |
+|---|---|---|
+| `ClockStrategy` | `now(): DateTimeImmutable` | Extends `Psr\Clock\ClockInterface` |
+| `HasTimezone` | `getTimezone(): DateTimeZone` | Platform's configured timezone |
+
+### Predicates on a single instant
+
+| Interface | Method |
+|---|---|
+| `CanCheckIfPast` | `isPast(DateTimeImmutable $instant): bool` |
+| `CanCheckIfFuture` | `isFuture(DateTimeImmutable $instant): bool` |
+| `CanCheckIfWeekend` | `isWeekend(DateTimeImmutable $instant): bool` |
+| `CanCheckIfWeekday` | `isWeekday(DateTimeImmutable $instant): bool` |
+
+### Predicates on two instants
+
+| Interface | Method |
+|---|---|
+| `CanCheckSameDay` | `isSameDay(DateTimeImmutable $a, DateTimeImmutable $b): bool` |
+| `CanCheckSameMonth` | `isSameMonth(DateTimeImmutable $a, DateTimeImmutable $b): bool` |
+| `CanCheckSameYear` | `isSameYear(DateTimeImmutable $a, DateTimeImmutable $b): bool` |
+| `CanCheckBetween` | `isBetween(DateTimeImmutable $i, DateTimeImmutable $start, DateTimeImmutable $end): bool` |
+
+### Arithmetic
+
+| Interface | Method |
+|---|---|
+| `CanApplyModifier` | `apply(DateTimeImmutable $instant, string $modifier): DateTimeImmutable` |
+| `CanAddInterval` | `add(DateTimeImmutable $instant, DateInterval $interval): DateTimeImmutable` |
+| `CanSubtractInterval` | `subtract(DateTimeImmutable $instant, DateInterval $interval): DateTimeImmutable` |
+
+### Calendar boundaries
+
+| Interface | Method |
+|---|---|
+| `CanGetStartOfDay` | `startOfDay(DateTimeImmutable $instant): DateTimeImmutable` |
+| `CanGetEndOfDay` | `endOfDay(DateTimeImmutable $instant): DateTimeImmutable` |
+| `CanGetStartOfMonth` | `startOfMonth(DateTimeImmutable $instant): DateTimeImmutable` |
+| `CanGetEndOfMonth` | `endOfMonth(DateTimeImmutable $instant): DateTimeImmutable` |
+| `CanGetStartOfYear` | `startOfYear(DateTimeImmutable $instant): DateTimeImmutable` |
+| `CanGetEndOfYear` | `endOfYear(DateTimeImmutable $instant): DateTimeImmutable` |
+
+### Difference and duration
+
+| Interface | Method |
+|---|---|
+| `CanGetDifference` | `diff(DateTimeImmutable $a, DateTimeImmutable $b): DateInterval` |
+| `CanGetDifferenceInDays` | `diffInDays(DateTimeImmutable $a, DateTimeImmutable $b): int` |
+| `CanGetDifferenceInHours` | `diffInHours(DateTimeImmutable $a, DateTimeImmutable $b): int` |
+| `CanGetDifferenceInMinutes` | `diffInMinutes(DateTimeImmutable $a, DateTimeImmutable $b): int` |
+| `CanGetDifferenceInSeconds` | `diffInSeconds(DateTimeImmutable $a, DateTimeImmutable $b): int` |
+
+### Parsing
+
+| Interface | Method |
+|---|---|
+| `CanParseDate` | `parse(string $expression): DateTimeImmutable` |
+| `CanParseDateWithFormat` | `parseFormat(string $expression, string $format): DateTimeImmutable` |
+
+### Formatting
+
+| Interface | Method |
+|---|---|
+| `CanFormatDate` | `format(DateTimeImmutable $instant, string $format): string` |
+| `CanFormatLocalizedDate` | `formatLocalized(DateTimeImmutable $instant, string $format): string` |
+| `CanFormatRelativeTime` | `relative(DateTimeImmutable $instant): string` ("3 hours ago") |
+
+### Model contracts
+
+These two are model-side contracts for persisted records — every PHPNomad model that participates in audit trails implements them.
+
+| Interface | Method |
+|---|---|
+| `HasCreatedDate` | `getCreatedDate(): DateTimeImmutable` |
+| `HasModifiedDate` | `getModifiedDate(): DateTimeImmutable` |
+
+## How integrations compose the catalog
+
+An integration package ships one or more concrete classes that implement the cluster of interfaces its underlying library can naturally fulfill. `phpnomad/wordpress-integration` ships a class implementing the WordPress-specific subset:
 
 ```php
-interface ClockStrategy extends \Psr\Clock\ClockInterface
+class WordPressClockStrategy implements
+    ClockStrategy,
+    HasTimezone,
+    CanFormatLocalizedDate,
+    CanFormatRelativeTime
 {
-    // public function now(): \DateTimeImmutable;
+    public function now(): DateTimeImmutable { /* current_datetime() */ }
+    public function getTimezone(): DateTimeZone { /* wp_timezone() */ }
+    public function formatLocalized(DateTimeImmutable $i, string $f): string { /* wp_date() */ }
+    public function relative(DateTimeImmutable $i): string { /* human_time_diff() */ }
 }
 ```
 
-## Why an abstraction
+A hypothetical `phpnomad/carbon-integration` would ship a class implementing the much broader Carbon-backed cluster (predicates, arithmetic, boundaries, diff, parsing, formatting). A consumer that needs WordPress's timezone alongside Carbon's diff math binds each interface to the appropriate concrete.
 
-Anywhere your code reads "now" — token expiration, audit timestamps, scheduling windows, retry delays — is a place where a direct call to `new DateTime()` or `time()` makes the surrounding behavior untestable. Tests cannot assert "this token is valid at T but expired at T+1" without process-level clock mocking, which most PHP setups do not have.
+## Why a catalog of narrow interfaces
 
-`ClockStrategy` is the seam. Bind a real clock in production, bind a fixed clock in tests, swap to a WordPress-timezone-aware clock when running inside WordPress. The consumer code does not change.
+A single fat `TimeStrategy` interface would force every integrator to implement methods their underlying library does not naturally support. A catalog of narrow interfaces lets integrators declare exactly what their library covers, and lets consumers depend only on the capabilities they use. Integrations declare PHPNomad support by implementing the relevant interfaces; consumers compose multiple integrations across libraries as needed.
 
 ## License
 
