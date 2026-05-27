@@ -1,0 +1,48 @@
+{
+    "name": "phpnomad/chrono",
+    "description": "Time-related contract interfaces for PHPNomad. Ships interfaces only — pair with a concrete integration package (e.g. wordpress-integration).",
+    "type": "library",
+    "homepage": "https://github.com/phpnomad/chrono",
+    "readme": "README.md",
+    "license": "MIT",
+    "keywords": [
+        "phpnomad",
+        "time",
+        "clock",
+        "psr-20",
+        "abstraction",
+        "interface"
+    ],
+    "scripts": {
+        "php-cs-fixer": "php-cs-fixer fix",
+        "test": "phpunit"
+    },
+    "autoload": {
+        "psr-4": {
+            "PHPNomad\\Chrono\\": "lib/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PHPNomad\\Chrono\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Alex Standiford",
+            "email": "alex@standiford.us"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "psr/clock": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        }
+    }
+}
