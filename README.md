@@ -68,6 +68,7 @@ Each interface is narrow — one or a few related methods — so integrators can
 |---|---|---|
 | `ClockStrategy` | `now(): DateTimeImmutable` | Extends `Psr\Clock\ClockInterface` |
 | `HasTimezone` | `getTimezone(): DateTimeZone` | Platform's configured timezone |
+| `HasLocale` | `getLocale(): string` | Platform's configured locale (BCP 47 / POSIX style) |
 
 ### Predicates on a single instant
 

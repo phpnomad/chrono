@@ -31,6 +31,7 @@ use PHPNomad\Chrono\Interfaces\CanParseDateWithFormat;
 use PHPNomad\Chrono\Interfaces\CanSubtractInterval;
 use PHPNomad\Chrono\Interfaces\ClockStrategy;
 use PHPNomad\Chrono\Interfaces\HasCreatedDate;
+use PHPNomad\Chrono\Interfaces\HasLocale;
 use PHPNomad\Chrono\Interfaces\HasModifiedDate;
 use PHPNomad\Chrono\Interfaces\HasTimezone;
 use PHPUnit\Framework\TestCase;
@@ -56,6 +57,7 @@ final class ValidateCITest extends TestCase
         return [
             [ClockStrategy::class],
             [HasTimezone::class],
+            [HasLocale::class],
             [HasCreatedDate::class],
             [HasModifiedDate::class],
             [CanCheckIfPast::class],
